@@ -55,10 +55,12 @@ Symbol table[3] = {{"[0]", "x", 0, 0},
                    {"[4]", "y", 0, 0},
                    {"[8]", "z", 0, 0}};
 int sbcount = 0;
-int count = 1;  
+int count = 0;  
 int behind;
-int xLast, yLast, zLast;
-int last[3];
+int already;
+//int xLast, yLast, zLast;
+int last[3] = {0};
+int asked[3] = {0};
 Result *head, *nr, *nrHead;
 Line *lineHead, *nl;
 Reg r[20];
@@ -92,7 +94,8 @@ char* getLexeme(void)
 }
 void error(ErrorType errorNum)
 {
-    switch (errorNum) {
+    printf("EXIT 1\n");
+    /*switch (errorNum) {
     case MISPAREN:
         fprintf(stderr, "Mismatched parenthesis\n");
         break;
@@ -104,7 +107,7 @@ void error(ErrorType errorNum)
         break;
     case RUNOUT:
         fprintf(stderr, "Out of memory\n");
-    }
+    }*/
     exit(0);
 }
 
@@ -271,6 +274,7 @@ BTNode* factor(void)
     if (match(INT)) {
         retp =  makeNode(INT, getLexeme());
         retp->val = getval();
+        already = 1;
         advance();
     } else if (match(ID)) {
         BTNode* left = makeNode(ID, getLexeme());
@@ -278,6 +282,7 @@ BTNode* factor(void)
         strcpy(tmpstr, getLexeme());
         advance();
         if (match(ASSIGN)) {
+            if (already) error(0);
             behind = 1;
             retp = makeNode(ASSIGN, getLexeme());
             advance();
@@ -288,6 +293,7 @@ BTNode* factor(void)
             retp = left;
         }
     } else if (match(ADDSUB)) {
+        already = 1;
         strcpy(tmpstr, getLexeme());
         advance();
         if (match(ID) || match(INT)) {
@@ -304,6 +310,7 @@ BTNode* factor(void)
             error(NOTNUMID);
         }
     } else if (match(LPAREN)) {
+        already = 1;
         advance();
         retp = expr();
         if (match(RPAREN)) {
@@ -325,12 +332,15 @@ BTNode* term(void)
     retp = left = factor();
 
     while (match(MULDIV)) {
+        already = 1;
         retp = makeNode(MULDIV, getLexeme());
         advance();
         retp->right = factor();
         retp->left = left;
         left = retp;
     }
+    //這樣算錯ㄇ
+    if (match(ID) || match(INT)) error(0);
     return retp;
 }
 
@@ -342,12 +352,15 @@ BTNode* expr(void)
     //int retval;
     retp = left = term();
     while (match(ADDSUB)) {
+        already = 1;
         retp = makeNode(ADDSUB, getLexeme());
         advance();
         retp->right = term();
         retp->left = left;
         left = retp;
     }
+    //這樣算錯ㄇ
+    if (match(ID) || match(INT)) error(0);
     return retp;
 }
 
@@ -367,7 +380,8 @@ void printList(void)
     Result *tmp;
     tmp = head;
     while (tmp != NULL)
-    {
+    {   
+        if (tmp->line == last[0] || tmp->line == last[1] || tmp->line == last[2])
         printf("%s", tmp->s);
         tmp = tmp->next;
     }
@@ -385,7 +399,7 @@ void reArrange(BTNode *root) {
         if(strcmp(root->left->lexeme, "+") == 0) {
             if (root->right->data == INT) {
                 if(root->left->left->data != INT && root->left->right->data == INT) {
-                    printf("he\n");
+                    //printf("he\n");
                     root->right->val = root->right->val + root->left->right->val;
                     a = root->left;
                     root->left = root->left->left;
@@ -396,7 +410,7 @@ void reArrange(BTNode *root) {
                     free(a);
                 }
                 else if(root->left->right->data != INT && root->left->left->data == INT) {
-                    printf("she\n");
+                    //printf("she\n");
                     root->right->val = root->right->val + root->left->left->val;
                     a = root->left;
                     root->left = root->left->right;
@@ -411,7 +425,7 @@ void reArrange(BTNode *root) {
         else if(strcmp(root->right->lexeme, "+") == 0) {
             if (root->left->data == INT) {
                 if(root->right->left->data != INT && root->right->right->data == INT) {
-                    printf("hee\n");
+                    //printf("hee\n");
                     root->left->val = root->left->val + root->right->right->val;
                     a = root->right;
                     root->right = root->right->left;
@@ -424,7 +438,7 @@ void reArrange(BTNode *root) {
                 else if(root->right->right->data != INT && root->right->left->data == INT) {
                     root->left->val = root->left->val + root->right->left->val;
                     //printf("hey %d\n", root->left->val);
-                    printf("shee\n");
+                    //printf("shee\n");
                     a = root->right;
                     root->right = root->right->right;
                     a->right = NULL;
@@ -445,12 +459,13 @@ void reArrange(BTNode *root) {
 }
 
 void freeList(Result *tar) {
-    Result *tmp, *next;
+    Result *tmp, *n;
     tmp = tar;
+    //printf("!!!\n");
     while(tmp != NULL) {
-        next = tmp;
+        n = tmp;
         tmp = tmp->next;
-        free(next);
+        free(n);
     }
 }
 
@@ -487,7 +502,7 @@ void treeToList(BTNode *root) {
             if(strcmp(root->lexeme, table[i].name) == 0) {
                 if(!table[i].init) {
                     table[i].init = 1;
-                    
+                    asked[i] = count;
                     sprintf(nr->s, "MOV %s %s\n", r[i].name, table[i].Addr);
                     nr->line = count;
                     newRes();
@@ -513,6 +528,8 @@ void treeToList(BTNode *root) {
                         sprintf(nr->s, "MUL %s %s\n", r[n].name, r[root->right->n].name);
                     nr->line = count;
                     newRes();
+
+
                 }
                 r[n].isConst = r[root->left->n].isConst && r[root->right->n].isConst;
                 r[n].isUsed = 1;
@@ -593,19 +610,19 @@ void treeToList(BTNode *root) {
                     root->val = r[root->left->n].val + r[root->right->n].val;
                 if (strcmp(root->lexeme, "*") == 0)
                     root->val = r[root->left->n].val * r[root->right->n].val;
-                printf("wht %d %d\n",root->val, r[root->left->n].val);
+                //printf("wht %d %d\n",root->val, r[root->left->n].val);
                 r[root->n].val = root->val;
                 r[root->n].isConst = r[root->left->n].isConst && r[root->right->n].isConst;
             }
         }
         else if (strcmp(root->lexeme, "-") == 0 || strcmp(root->lexeme, "/") == 0) {
-            printf("%s %s\n" ,root->left->lexeme, root->left->lexeme);
+            //printf("%s %s\n" ,root->left->lexeme, root->left->lexeme);
             if (strcmp(root->lexeme, "/") == 0 && root->right->val == 0 && r[root->right->n].isConst == 1){
                 printf("EXIT 1\n");
                 exit(0);
             }
-            else if (strcmp(root->left->lexeme, root->right->lexeme) == 0 && root->left->n > 2) {
-                printf("ga\n");
+            else if (r[root->left->n].isConst && r[root->left->n].isConst && root->left->val == root->right->val && root->left->n > 2) {
+                //printf("ga\n");
                 if (strcmp(root->lexeme, "-") == 0) root->val = 0;
                 if (strcmp(root->lexeme, "/") == 0) root->val = 1;
                 root->n = root->left->n;
@@ -613,8 +630,8 @@ void treeToList(BTNode *root) {
                 r[root->n].isConst = 1;
                 root->data = REG;
             }
-            else if (strcmp(root->left->lexeme, root->right->lexeme) == 0) {
-                printf("gaaa\n");
+            else if (r[root->left->n].isConst && r[root->left->n].isConst && root->left->val == root->right->val) {
+                //printf("gaaa\n");
                 int n = findUnused();
                 if (strcmp(root->lexeme, "-") == 0) root->val = 0;
                 if (strcmp(root->lexeme, "/") == 0) root->val = 1;
@@ -649,7 +666,7 @@ void treeToList(BTNode *root) {
                 root->data = REG;
                 if (strcmp(root->lexeme, "-") == 0)
                     root->val = r[root->left->n].val - r[root->right->n].val;
-                if (strcmp(root->lexeme, "/") == 0 && root->right->data == INT)
+                if (strcmp(root->lexeme, "/") == 0 && r[root->right->n].isConst)
                     root->val = r[root->left->n].val / r[root->right->n].val;
                 
                 root->n = root->left->n;
@@ -684,8 +701,9 @@ void treeToList(BTNode *root) {
                 r[n].isUsed = 1;
                 if (strcmp(root->lexeme, "-") == 0)
                     r[n].val = root->left->val - root->right->val;
-                if (strcmp(root->lexeme, "/") == 0 && root->right->data == INT)
+                if (strcmp(root->lexeme, "/") == 0 && r[root->right->n].isConst)
                     r[n].val = root->left->val / root->right->val;
+                //printf("%d %d %d\n", r[n].val, root->left->val, root->right->val);
                 root->data = REG;
                 root->val = r[n].val;
                 root->n = n;
@@ -711,12 +729,14 @@ void statement(void)
     
     int preInit[3];
     if (match(ENDFILE)) {
-        printList();
+        
         for(int i = 0; i < 3; i++) {
-            if (table[i].init == 0) {
+            //printf("last %d %d\n", i , last[i]);
+            if ((last[i] == 0 && asked[i] == 0)||(asked[i]!=0 && asked[i]!= last[0] && asked[i]!= last[1] && asked[i]!= last[2]))  {
                 printf("MOV r%d %s\n", i, table[i].Addr);
             }
         }
+        printList();
         printf("EXIT 0\n");
         exit(0);
     } else if (match(END)) {
@@ -724,6 +744,7 @@ void statement(void)
         advance();
     } else {
         nrHead = nr;
+        already = 0;                                                                                                                                                     
         retp = expr();
         if (match(END)) {
             
@@ -741,7 +762,7 @@ void statement(void)
             treeToList(retp);
             if (toAssign->isConst) {
                 Result *rtmp, *del;
-                printf("this %s\n",nrHead->s);
+                //printf("this %s\n",nrHead->s);
                 rtmp = nrHead;
                 //printf("b %s\n", nrHead->s);
                 //while(rtmp->line != count) rtmp = rtmp->next;
@@ -752,15 +773,15 @@ void statement(void)
                     rtmp->next = NULL;
                     freeList(del);
                 }
-                else printf("ya\n");
+                //else printf("ya\n");
                 
                 nr = rtmp;
                 //newRes();
                 
                 for(int i = 0; i < 3; i++) {
                     if(nl->master[i] == 1) {
-                        printf("to %d\n", toAssign->val);
-                        
+                        //printf("to %d\n", toAssign->val);
+                        r[i].isConst = 1;
                         r[i].val = toAssign->val;
                         table[i].init = 1;
                         table[i].val = r[i].val;
@@ -770,6 +791,7 @@ void statement(void)
                         newRes();
                     }
                     else if (preInit[i] == 0 && table[i].init == 1) {
+                        
                         sprintf(nr->s, "MOV %s %s\n", r[i].name, table[i].Addr);
                         nr->line = count;
                         newRes();
@@ -810,15 +832,38 @@ void statement(void)
         }
     }
 }
+void checkLeft(BTNode *root) {
+    if (root->left) checkLeft(root->left);
+    if (root->right) checkLeft(root->right);
+    if (root->data!=ID) {
+        error(0);
+    }
+}
 
 void evaluateTree(BTNode *root)
 {
     int retval = 0, lv, rv;
     BTNode *tmp;
     char lexe[MAXLEN];
+    
     if (root != NULL)
     {
-        if (root->data == INT || root->data == ID) return;
+        //if(root->data == ASSIGN) checkLeft(root->left);
+        if (root->data == INT) return;
+        else if (root->data == ID) {
+            for (int i = 0; i < 3; i++) {
+                if (strcmp(root->lexeme, r[i].name) == 0) {
+                    if (r[i].isConst) {
+                        root->data = INT;
+                        root->val = r[i].val;
+                        sprintf(lexe, "%d", root->val);
+                        strcpy(root->lexeme, lexe);
+                    }
+                    break;
+                }
+            }
+            return;
+        }
         if (root->left) evaluateTree(root->left);
         if (root->right) evaluateTree(root->right);
 
@@ -842,6 +887,10 @@ void evaluateTree(BTNode *root)
             }
             else if (strcmp(root->lexeme, "/") == 0) {
                 //要補除以0的狀況
+                if (root->right->val == 0){
+                printf("EXIT 1\n");
+                exit(0);
+                }
                 root->val = root->left->val / root->right->val;
                 sprintf(lexe, "%d", root->val);
                 strcpy(root->lexeme, lexe);
@@ -903,6 +952,7 @@ int main()
     head = (Result*)malloc(sizeof(Result));
     sprintf(head->s, "");
     head->line = count;
+    head->next = NULL;
     nr = head;
     //newRes();
 
