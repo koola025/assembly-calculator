@@ -156,10 +156,11 @@ TokenSet getToken(void)
         lexeme[0] = c;
         c = fgetc(stdin);
         i = 1;
-        while (isalpha(c) || isdigit(c) || c == '_') {
-            lexeme[i] = c;
+        if (isalpha(c) || isdigit(c) || c == '_') {
+            error(0);
+            /*lexeme[i] = c;
             ++i;
-            c = fgetc(stdin);
+            c = fgetc(stdin);*/
         }
         ungetc(c, stdin);
         lexeme[i] = '\0';
@@ -281,7 +282,8 @@ BTNode* factor(void)
         left->val = getval();
         strcpy(tmpstr, getLexeme());
         advance();
-        if (match(ASSIGN)) {
+        if (match(ID)) error(0);
+        else if (match(ASSIGN)) {
             if (already) error(0);
             behind = 1;
             retp = makeNode(ASSIGN, getLexeme());
@@ -617,11 +619,12 @@ void treeToList(BTNode *root) {
         }
         else if (strcmp(root->lexeme, "-") == 0 || strcmp(root->lexeme, "/") == 0) {
             //printf("%s %s\n" ,root->left->lexeme, root->left->lexeme);
+            //printf("plzz\n");
             if (strcmp(root->lexeme, "/") == 0 && root->right->val == 0 && r[root->right->n].isConst == 1){
                 printf("EXIT 1\n");
                 exit(0);
             }
-            else if (r[root->left->n].isConst && r[root->left->n].isConst && root->left->val == root->right->val && root->left->n > 2) {
+            else if (r[root->left->n].isConst && r[root->right->n].isConst && root->left->val == root->right->val && root->left->n > 2) {
                 //printf("ga\n");
                 if (strcmp(root->lexeme, "-") == 0) root->val = 0;
                 if (strcmp(root->lexeme, "/") == 0) root->val = 1;
@@ -630,7 +633,7 @@ void treeToList(BTNode *root) {
                 r[root->n].isConst = 1;
                 root->data = REG;
             }
-            else if (r[root->left->n].isConst && r[root->left->n].isConst && root->left->val == root->right->val) {
+            else if (r[root->left->n].isConst && r[root->right->n].isConst && root->left->val == root->right->val) {
                 //printf("gaaa\n");
                 int n = findUnused();
                 if (strcmp(root->lexeme, "-") == 0) root->val = 0;
@@ -642,7 +645,7 @@ void treeToList(BTNode *root) {
                 root->n = n;
             }
             else if (root->left->n > 2) {
-                
+                //printf("plz\n");
                 if (!r[root->left->n].isConst || !r[root->right->n].isConst) {
                     if (r[root->left->n].isConst) {
                         sprintf(nr->s, "MOV %s %d\n", r[root->left->n].name, root->left->val);
@@ -682,6 +685,7 @@ void treeToList(BTNode *root) {
             else {
                 int n = findUnused();
                 if (!r[root->left->n].isConst || !r[root->right->n].isConst) {
+
                     sprintf(nr->s, "MOV %s %s\n", r[n].name, r[root->left->n].name);
                     nr->line = count;
                     newRes();
@@ -697,6 +701,7 @@ void treeToList(BTNode *root) {
                     nr->line = count;
                     newRes();
                 }
+                
                 r[n].isConst = r[root->left->n].isConst && r[root->right->n].isConst;
                 r[n].isUsed = 1;
                 if (strcmp(root->lexeme, "-") == 0)
@@ -832,13 +837,7 @@ void statement(void)
         }
     }
 }
-void checkLeft(BTNode *root) {
-    if (root->left) checkLeft(root->left);
-    if (root->right) checkLeft(root->right);
-    if (root->data!=ID) {
-        error(0);
-    }
-}
+
 
 void evaluateTree(BTNode *root)
 {
@@ -848,7 +847,7 @@ void evaluateTree(BTNode *root)
     
     if (root != NULL)
     {
-        //if(root->data == ASSIGN) checkLeft(root->left);
+        
         if (root->data == INT) return;
         else if (root->data == ID) {
             for (int i = 0; i < 3; i++) {
