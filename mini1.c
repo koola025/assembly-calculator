@@ -71,6 +71,7 @@ void newRes(void) {
     nr->next = (Result*)malloc(sizeof(Result));
     nr = nr->next;
     nr->next = NULL;
+    
 }
 
 void newLine(void) {
@@ -383,7 +384,7 @@ void printList(void)
     tmp = head;
     while (tmp != NULL)
     {   
-        if (tmp->line == last[0] || tmp->line == last[1] || tmp->line == last[2])
+        if ((tmp->line == last[0] || tmp->line == last[1] || tmp->line == last[2]) && tmp->next != NULL)
         printf("%s", tmp->s);
         tmp = tmp->next;
     }
@@ -518,7 +519,76 @@ void treeToList(BTNode *root) {
     else if (root->data == MULDIV || root->data == ADDSUB) {
         //用完要釋出reg
         if (strcmp(root->lexeme, "+") == 0 || strcmp(root->lexeme, "*") == 0) {
-            if (root->left->n <= 2 && root->right->n <= 2) {
+            if(strcmp(root->lexeme, "*") == 0 && (r[root->left->n].isConst && root->left->val == 1)) {
+                root->n = root->right->n;
+                root->data = REG;
+                root->val = root->right->val;
+                if (root->left->n > 2) {
+                    r[root->left->n].isUsed = 0;
+                    r[root->left->n].isConst = 0;
+                    r[root->left->n].val = 0;
+                }
+            }
+            else if(strcmp(root->lexeme, "*") == 0 && (r[root->right->n].isConst && root->right->val == 1)) {
+                root->n = root->left->n;
+                root->data = REG;
+                root->val = root->left->val;
+                if (root->right->n > 2) {
+                    r[root->right->n].isUsed = 0;
+                    r[root->right->n].isConst = 0;
+                    r[root->right->n].val = 0;
+                }
+
+            }
+            else if (strcmp(root->lexeme, "*") == 0 && (r[root->right->n].isConst && root->right->val == 0)) {
+                root->n = root->left->n;
+                r[root->left->n].val = 0;
+                r[root->left->n].isConst = 1;
+                root->data = REG;
+                root->val = 0;
+                if (root->right->n > 2) {
+                    r[root->right->n].isUsed = 0;
+                    r[root->right->n].isConst = 0;
+                    r[root->right->n].val = 0;
+                }
+
+            }
+            else if (strcmp(root->lexeme, "*") == 0 && (r[root->left->n].isConst && root->left->val == 0)) {
+                root->n = root->right->n;
+                r[root->right->n].val = 0;
+                r[root->right->n].isConst = 1;
+                root->data = REG;
+                root->val = 0;
+                if (root->left->n > 2) {
+                    r[root->left->n].isUsed = 0;
+                    r[root->left->n].isConst = 0;
+                    r[root->left->n].val = 0;
+                }
+
+            }
+            else if (strcmp(root->lexeme, "+") == 0 && (r[root->right->n].isConst && root->right->val == 0)) {
+                root->n = root->left->n;
+                root->data = REG;
+                root->val = root->left->val;
+                if (root->right->n > 2) {
+                    r[root->right->n].isUsed = 0;
+                    r[root->right->n].isConst = 0;
+                    r[root->right->n].val = 0;
+                }
+
+            }
+            else if (strcmp(root->lexeme, "+") == 0 && (r[root->left->n].isConst && root->left->val == 0)) {
+                root->n = root->right->n;
+                root->data = REG;
+                root->val = root->right->val;
+                if (root->left->n > 2) {
+                    r[root->left->n].isUsed = 0;
+                    r[root->left->n].isConst = 0;
+                    r[root->left->n].val = 0;
+                }
+
+            }
+            else if (root->left->n <= 2 && root->right->n <= 2) {
                 int n = findUnused();
                 if (!r[root->left->n].isConst || !r[root->right->n].isConst) {
                     sprintf(nr->s, "MOV %s %s\n", r[n].name, r[root->left->n].name);
@@ -623,6 +693,26 @@ void treeToList(BTNode *root) {
             if (strcmp(root->lexeme, "/") == 0 && root->right->val == 0 && r[root->right->n].isConst == 1){
                 printf("EXIT 1\n");
                 exit(0);
+            }
+            else if (strcmp(root->lexeme, "/") == 0 && r[root->right->n].isConst && root->right->val == 1) {
+                root->n = root->left->n;
+                root->data = REG;
+                root->val = root->left->val;
+                if (root->right->n > 2) {
+                    r[root->right->n].isUsed = 0;
+                    r[root->right->n].isConst = 0;
+                    r[root->right->n].val = 0;
+                }
+            }
+            else if (strcmp(root->lexeme, "-") == 0 && r[root->right->n].isConst && root->right->val == 0) {
+                root->n = root->left->n;
+                root->data = REG;
+                root->val = root->left->val;
+                if (root->right->n > 2) {
+                    r[root->right->n].isUsed = 0;
+                    r[root->right->n].isConst = 0;
+                    r[root->right->n].val = 0;
+                }
             }
             else if (r[root->left->n].isConst && r[root->right->n].isConst && root->left->val == root->right->val && root->left->n > 2) {
                 //printf("ga\n");
@@ -847,12 +937,17 @@ void evaluateTree(BTNode *root)
     
     if (root != NULL)
     {
-        
+        //printPrefix(root);
+
+        //printf("rooot lex %s\n", root->lexeme);
         if (root->data == INT) return;
         else if (root->data == ID) {
+            //compare錯 其實沒用到
             for (int i = 0; i < 3; i++) {
+                //printf("rooot %s %s\n", root->lexeme, r[i].name);
                 if (strcmp(root->lexeme, r[i].name) == 0) {
                     if (r[i].isConst) {
+                        //printf("yo\n");
                         root->data = INT;
                         root->val = r[i].val;
                         sprintf(lexe, "%d", root->val);
