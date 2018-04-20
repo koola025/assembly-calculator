@@ -42,6 +42,7 @@ typedef struct _reg {
     char name[5];
     int val;
     int n;
+    int m;
     int isUsed;
     int isConst;
 } Reg;
