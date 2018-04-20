@@ -34,6 +34,7 @@ typedef struct _Node {
     TokenSet data;
     int val;
     int n;
+    int m;
     struct _Node *left, *right;
 } BTNode;
 
@@ -46,6 +47,11 @@ typedef struct _reg {
     int isUsed;
     int isConst;
 } Reg;
+
+typedef struct _r {
+    int n;
+    int m;
+} rPair;
 
 BTNode* expr(void);
 void evaluateTree(BTNode *root);
@@ -64,7 +70,7 @@ int last[3] = {0};
 int asked[3] = {0};
 Result *head, *nr, *nrHead;
 Line *lineHead, *nl;
-Reg r[20];
+Reg r[8][10];
 Reg *toAssign;
 
 
@@ -81,13 +87,22 @@ void newLine(void) {
     nl->next = NULL;
 }
 
-int findUnused(void) {   //找還沒用過的r
+rPair *findUnused(void) {   //找還沒用過的r
     //printf("findUnused\n");
-    int i;
-    for(i = 3; i < 20; i++) { //直接從r3開始找
-        if(!r[i].isUsed) return i;
+    rPair *p;
+    p = (rPair *)malloc(sizeof(rPair));
+    int i, j;
+    for(j = 0; j < 10; j++) {
+        for(i = 3; i < 8; i++) { //直接從r3開始找
+            if(!r[i][j].isUsed) {
+                p->n = i;
+                p->m = j;
+                return p;
+            }
+        }
     }
-    return 99;
+   
+    return p;
 }
 
 char* getLexeme(void)
@@ -491,15 +506,23 @@ void treeToList(BTNode *root) {
     if (root->right) treeToList(root->right);
     if (root->data == INT) {
         //printf("int here\n");
-        int n = findUnused();
+        rPair *p = findUnused();
         /*sprintf(nr->s, "MOV %s %d\n", r[n].name, root->val);
         nr->line = count;
         newRes();*/
-        r[n].isConst = 1;
-        r[n].isUsed = 1;
-        r[n].val = root->val;
+        if (p->m > 0) {
+            int mem = (5 * (p->m - 1) + p->n - 3) * 4 + 12;
+            sprintf(nr->s, "MOV [%d] %s\n", mem, r[p->n][p->m].name);
+            nr->line = count;
+            newRes();
+        }
+        r[p->n][p->m].isConst = 1;
+        r[p->n][p->m].isUsed = 1;
+        r[p->n][p->m].val = root->val;
         root->data = REG;
-        root->n = n;
+        root->n = p->n;
+        root->m = p->m;
+        free(p);
     }
     else if (root->data == ID) {
         for(int i = 0; i < 3; i++) {
@@ -507,12 +530,13 @@ void treeToList(BTNode *root) {
                 if(!table[i].init) {
                     table[i].init = 1;
                     asked[i] = count;
-                    sprintf(nr->s, "MOV %s %s\n", r[i].name, table[i].Addr);
+                    sprintf(nr->s, "MOV %s %s\n", r[i][0].name, table[i].Addr);
                     nr->line = count;
                     newRes();
                 }
                 root->data = REG;
                 root->n = i;
+                root->m = 0;
                 break;
             }
         }
@@ -520,302 +544,379 @@ void treeToList(BTNode *root) {
     else if (root->data == MULDIV || root->data == ADDSUB) {
         //用完要釋出reg
         if (strcmp(root->lexeme, "+") == 0 || strcmp(root->lexeme, "*") == 0) {
-            if(strcmp(root->lexeme, "*") == 0 && (r[root->left->n].isConst && root->left->val == 1)) {
+            if(strcmp(root->lexeme, "*") == 0 && (r[root->left->n][root->left->m].isConst && root->left->val == 1)) {
                 root->n = root->right->n;
+                root->m = root->right->m;
                 root->data = REG;
                 root->val = root->right->val;
                 if (root->left->n > 2) {
-                    r[root->left->n].isUsed = 0;
-                    r[root->left->n].isConst = 0;
-                    r[root->left->n].val = 0;
+                    if (root->left->m > 0) {
+                        int mem = (5 * (root->left->m - 1) + root->left->n - 3) * 4 + 12;
+                        sprintf(nr->s, "MOV %s [%d]\n", r[root->left->n][root->left->m].name , mem);
+                        nr->line = count;
+                        newRes();
+                    }
+                    r[root->left->n][root->left->m].isUsed = 0;
+                    r[root->left->n][root->left->m].isConst = 0;
+                    r[root->left->n][root->left->m].val = 0;
                 }
             }
-            else if(strcmp(root->lexeme, "*") == 0 && (r[root->right->n].isConst && root->right->val == 1)) {
+            else if(strcmp(root->lexeme, "*") == 0 && (r[root->right->n][root->right->m].isConst && root->right->val == 1)) {
                 root->n = root->left->n;
+                root->m = root->left->m;
                 root->data = REG;
                 root->val = root->left->val;
                 if (root->right->n > 2) {
-                    r[root->right->n].isUsed = 0;
-                    r[root->right->n].isConst = 0;
-                    r[root->right->n].val = 0;
+                    if (root->right->m > 0) {
+                        int mem = (5 * (root->right->m - 1) + root->right->n - 3) * 4 + 12;
+                        sprintf(nr->s, "MOV %s [%d]\n", r[root->right->n][root->right->m].name , mem);
+                        nr->line = count;
+                        newRes();
+                    }
+                    r[root->right->n][root->right->m].isUsed = 0;
+                    r[root->right->n][root->right->m].isConst = 0;
+                    r[root->right->n][root->right->m].val = 0;
                 }
 
             }
-            else if (strcmp(root->lexeme, "*") == 0 && (r[root->right->n].isConst && root->right->val == 0)) {
+            else if (strcmp(root->lexeme, "*") == 0 && (r[root->right->n][root->right->m].isConst && root->right->val == 0)) {
                 root->n = root->left->n;
-                r[root->left->n].val = 0;
-                r[root->left->n].isConst = 1;
+                root->m = root->left->m;
+                r[root->left->n][root->left->m].val = 0;
+                r[root->left->n][root->left->m].isConst = 1;
                 root->data = REG;
                 root->val = 0;
                 if (root->right->n > 2) {
-                    r[root->right->n].isUsed = 0;
-                    r[root->right->n].isConst = 0;
-                    r[root->right->n].val = 0;
+                    if (root->right->m > 0) {
+                        int mem = (5 * (root->right->m - 1) + root->right->n - 3) * 4 + 12;
+                        sprintf(nr->s, "MOV %s [%d]\n", r[root->right->n][root->right->m].name , mem);
+                        nr->line = count;
+                        newRes();
+                    }
+                    r[root->right->n][root->right->m].isUsed = 0;
+                    r[root->right->n][root->right->m].isConst = 0;
+                    r[root->right->n][root->right->m].val = 0;
                 }
 
             }
-            else if (strcmp(root->lexeme, "*") == 0 && (r[root->left->n].isConst && root->left->val == 0)) {
+            else if (strcmp(root->lexeme, "*") == 0 && (r[root->left->n][root->left->m].isConst && root->left->val == 0)) {
                 root->n = root->right->n;
-                r[root->right->n].val = 0;
-                r[root->right->n].isConst = 1;
+                root->m = root->right->m;
+                r[root->right->n][root->right->m].val = 0;
+                r[root->right->n][root->right->m].isConst = 1;
                 root->data = REG;
                 root->val = 0;
                 if (root->left->n > 2) {
-                    r[root->left->n].isUsed = 0;
-                    r[root->left->n].isConst = 0;
-                    r[root->left->n].val = 0;
+                    if (root->left->m > 0) {
+                        int mem = (5 * (root->left->m - 1) + root->left->n - 3) * 4 + 12;
+                        sprintf(nr->s, "MOV %s [%d]\n", r[root->left->n][root->left->m].name , mem);
+                        nr->line = count;
+                        newRes();
+                    }
+                    r[root->left->n][root->left->m].isUsed = 0;
+                    r[root->left->n][root->left->m].isConst = 0;
+                    r[root->left->n][root->left->m].val = 0;
                 }
 
             }
-            else if (strcmp(root->lexeme, "+") == 0 && (r[root->right->n].isConst && root->right->val == 0)) {
+            else if (strcmp(root->lexeme, "+") == 0 && (r[root->right->n][root->right->m].isConst && root->right->val == 0)) {
                 root->n = root->left->n;
+                root->m = root->left->m;
                 root->data = REG;
                 root->val = root->left->val;
                 if (root->right->n > 2) {
-                    r[root->right->n].isUsed = 0;
-                    r[root->right->n].isConst = 0;
-                    r[root->right->n].val = 0;
+                    if (root->right->m > 0) {
+                        int mem = (5 * (root->right->m - 1) + root->right->n - 3) * 4 + 12;
+                        sprintf(nr->s, "MOV %s [%d]\n", r[root->right->n][root->right->m].name , mem);
+                        nr->line = count;
+                        newRes();
+                    }
+                    r[root->right->n][root->right->m].isUsed = 0;
+                    r[root->right->n][root->right->m].isConst = 0;
+                    r[root->right->n][root->right->m].val = 0;
                 }
 
             }
-            else if (strcmp(root->lexeme, "+") == 0 && (r[root->left->n].isConst && root->left->val == 0)) {
+            else if (strcmp(root->lexeme, "+") == 0 && (r[root->left->n][root->left->m].isConst && root->left->val == 0)) {
                 root->n = root->right->n;
+                root->m = root->right->m;
                 root->data = REG;
                 root->val = root->right->val;
                 if (root->left->n > 2) {
-                    r[root->left->n].isUsed = 0;
-                    r[root->left->n].isConst = 0;
-                    r[root->left->n].val = 0;
+                    if (root->left->m > 0) {
+                        int mem = (5 * (root->left->m - 1) + root->left->n - 3) * 4 + 12;
+                        sprintf(nr->s, "MOV %s [%d]\n", r[root->left->n][root->left->m].name , mem);
+                        nr->line = count;
+                        newRes();
+                    }
+                    r[root->left->n][root->left->m].isUsed = 0;
+                    r[root->left->n][root->left->m].isConst = 0;
+                    r[root->left->n][root->left->m].val = 0;
                 }
 
             }
             else if (root->left->n <= 2 && root->right->n <= 2) {
-                int n = findUnused();
-                if (!r[root->left->n].isConst || !r[root->right->n].isConst) {
-                    sprintf(nr->s, "MOV %s %s\n", r[n].name, r[root->left->n].name);
+                rPair *p = findUnused();
+                if (p->m > 0) {
+                    int mem = (5 * (p->m - 1) + p->n - 3) * 4 + 12;
+                    sprintf(nr->s, "MOV [%d] %s\n", mem, r[p->n][p->m].name);
+                    nr->line = count;
+                    newRes();
+                }
+                if (!r[root->left->n][root->left->m].isConst || !r[root->right->n][root->right->m].isConst) {
+                    sprintf(nr->s, "MOV %s %s\n", r[p->n][p->m].name, r[root->left->n][root->left->m].name);
                     nr->line = count;
                     newRes();
                     if (strcmp(root->lexeme, "+") == 0)
-                        sprintf(nr->s, "ADD %s %s\n", r[n].name, r[root->right->n].name);
+                        sprintf(nr->s, "ADD %s %s\n", r[p->n][p->m].name, r[root->right->n][root->right->m].name);
                     if (strcmp(root->lexeme, "*") == 0)
-                        sprintf(nr->s, "MUL %s %s\n", r[n].name, r[root->right->n].name);
+                        sprintf(nr->s, "MUL %s %s\n", r[p->n][p->m].name, r[root->right->n][root->right->m].name);
                     nr->line = count;
                     newRes();
 
 
                 }
-                r[n].isConst = r[root->left->n].isConst && r[root->right->n].isConst;
-                r[n].isUsed = 1;
+                r[p->n][p->m].isConst = r[root->left->n][root->left->m].isConst && r[root->right->n][root->right->m].isConst;
+                r[p->n][p->m].isUsed = 1;
                 if (strcmp(root->lexeme, "+") == 0)
-                    r[n].val = root->left->val + root->right->val;
+                    r[p->n][p->m].val = root->left->val + root->right->val;
                 if (strcmp(root->lexeme, "*") == 0)
-                    r[n].val = root->left->val * root->right->val;
+                    r[p->n][p->m].val = root->left->val * root->right->val;
                 root->data = REG;
-                root->val = r[n].val;
-                root->n = n;
+                root->val = r[p->n][p->m].val;
+                root->n = p->n;
+                root->m = p->m;
+                free(p);
             }
             else if (root->left->n > 2) {
-                if (!r[root->left->n].isConst || !r[root->right->n].isConst) {
-                    if (r[root->left->n].isConst) {
-                        sprintf(nr->s, "MOV %s %d\n", r[root->left->n].name, root->left->val);
+                if (!r[root->left->n][root->left->m].isConst || !r[root->right->n][root->right->m].isConst) {
+                    if (r[root->left->n][root->left->m].isConst) {
+                        sprintf(nr->s, "MOV %s %d\n", r[root->left->n][root->left->m].name, root->left->val);
                         nr->line = count;
                         newRes();
                     }
-                    if (r[root->right->n].isConst) {
-                        sprintf(nr->s, "MOV %s %d\n", r[root->right->n].name, root->right->val);
+                    if (r[root->right->n][root->right->m].isConst) {
+                        sprintf(nr->s, "MOV %s %d\n", r[root->right->n][root->right->m].name, root->right->val);
                         nr->line = count;
                         newRes();
                     }
                 
                     if (strcmp(root->lexeme, "+") == 0)
-                        sprintf(nr->s, "ADD %s %s\n", r[root->left->n].name, r[root->right->n].name);
+                        sprintf(nr->s, "ADD %s %s\n", r[root->left->n][root->left->m].name, r[root->right->n][root->right->m].name);
                     if (strcmp(root->lexeme, "*") == 0)
-                        sprintf(nr->s, "MUL %s %s\n", r[root->left->n].name, r[root->right->n].name);
+                        sprintf(nr->s, "MUL %s %s\n", r[root->left->n][root->left->m].name, r[root->right->n][root->right->m].name);
                     nr->line = count;
                     newRes();
                 }
 
                 root->data = REG;
                 if (strcmp(root->lexeme, "+") == 0)
-                    root->val = r[root->left->n].val + r[root->right->n].val;
+                    root->val = r[root->left->n][root->left->m].val + r[root->right->n][root->right->m].val;
                 if (strcmp(root->lexeme, "*") == 0)
-                    root->val = r[root->left->n].val * r[root->right->n].val;
+                    root->val = r[root->left->n][root->left->m].val * r[root->right->n][root->right->m].val;
                 
                 root->n = root->left->n;
-                r[root->n].val = root->val;
-                r[root->n].isConst = r[root->left->n].isConst && r[root->right->n].isConst;
+                root->m = root->left->m;
+                r[root->n][root->m].val = root->val;
+                r[root->n][root->m].isConst = r[root->left->n][root->left->m].isConst && r[root->right->n][root->right->m].isConst;
 
                 if (root->right->n > 2) {
-                    r[root->right->n].isUsed = 0;
-                    r[root->right->n].isConst = 0;
-                    r[root->right->n].val = 0;
+                    if (root->right->m > 0) {
+                        int mem = (5 * (root->right->m - 1) + root->right->n - 3) * 4 + 12;
+                        sprintf(nr->s, "MOV %s [%d]\n", r[root->right->n][root->right->m].name , mem);
+                        nr->line = count;
+                        newRes();
+                    }
+                    r[root->right->n][root->right->m].isUsed = 0;
+                    r[root->right->n][root->right->m].isConst = 0;
+                    r[root->right->n][root->right->m].val = 0;
                 }
             }
             else if (root->right->n > 2) {
-                if (!r[root->left->n].isConst || !r[root->right->n].isConst) {
-                    if (r[root->left->n].isConst) {
-                        sprintf(nr->s, "MOV %s %d\n", r[root->left->n].name, root->left->val);
+                if (!r[root->left->n][root->left->m].isConst || !r[root->right->n][root->right->m].isConst) {
+                    if (r[root->left->n][root->left->m].isConst) {
+                        sprintf(nr->s, "MOV %s %d\n", r[root->left->n][root->left->m].name, root->left->val);
                         nr->line = count;
                         newRes();
                     }
-                    if (r[root->right->n].isConst) {
-                        sprintf(nr->s, "MOV %s %d\n", r[root->right->n].name, root->right->val);
+                    if (r[root->right->n][root->right->m].isConst) {
+                        sprintf(nr->s, "MOV %s %d\n", r[root->right->n][root->right->m].name, root->right->val);
                         nr->line = count;
                         newRes();
                     }
                     if (strcmp(root->lexeme, "+") == 0)
-                        sprintf(nr->s, "ADD %s %s\n", r[root->right->n].name, r[root->left->n].name);
+                        sprintf(nr->s, "ADD %s %s\n", r[root->right->n][root->right->m].name, r[root->left->n][root->left->m].name);
                     if (strcmp(root->lexeme, "*") == 0)
-                        sprintf(nr->s, "MUL %s %s\n", r[root->right->n].name, r[root->left->n].name);
+                        sprintf(nr->s, "MUL %s %s\n", r[root->right->n][root->right->m].name, r[root->left->n][root->left->m].name);
                     nr->line = count;
                     newRes();
                 }
                 
-
-                /*if (root->right->n > 2) {
-                    r[root->right->n].isUsed = 0;
-                    r[root->right->n].isConst = 0;
-                    r[root->right->n].val = 0;
-                }*/
                 root->n = root->right->n;
+                root->m = root->right->m;
                 root->data = REG;
                 if (strcmp(root->lexeme, "+") == 0)
-                    root->val = r[root->left->n].val + r[root->right->n].val;
+                    root->val = r[root->left->n][root->left->m].val + r[root->right->n][root->right->m].val;
                 if (strcmp(root->lexeme, "*") == 0)
-                    root->val = r[root->left->n].val * r[root->right->n].val;
-                //printf("wht %d %d\n",root->val, r[root->left->n].val);
-                r[root->n].val = root->val;
-                r[root->n].isConst = r[root->left->n].isConst && r[root->right->n].isConst;
+                    root->val = r[root->left->n][root->left->m].val * r[root->right->n][root->right->m].val;
+                r[root->n][root->m].val = root->val;
+                r[root->n][root->m].isConst = r[root->left->n][root->left->m].isConst && r[root->right->n][root->right->m].isConst;
             }
         }
         else if (strcmp(root->lexeme, "-") == 0 || strcmp(root->lexeme, "/") == 0) {
-            //printf("%s %s\n" ,root->left->lexeme, root->left->lexeme);
-            //printf("plzz\n");
-            if (strcmp(root->lexeme, "/") == 0 && root->right->val == 0 && r[root->right->n].isConst == 1){
+            if (strcmp(root->lexeme, "/") == 0 && root->right->val == 0 && r[root->right->n][root->right->m].isConst == 1){
                 printf("EXIT 1\n");
                 exit(0);
             }
-            else if (strcmp(root->lexeme, "/") == 0 && r[root->right->n].isConst && root->right->val == 1) {
+            else if (strcmp(root->lexeme, "/") == 0 && r[root->right->n][root->right->m].isConst && root->right->val == 1) {
                 root->n = root->left->n;
+                root->m = root->left->m;
                 root->data = REG;
                 root->val = root->left->val;
                 if (root->right->n > 2) {
-                    r[root->right->n].isUsed = 0;
-                    r[root->right->n].isConst = 0;
-                    r[root->right->n].val = 0;
-                }
-            }
-            else if (strcmp(root->lexeme, "-") == 0 && r[root->right->n].isConst && root->right->val == 0) {
-                root->n = root->left->n;
-                root->data = REG;
-                root->val = root->left->val;
-                if (root->right->n > 2) {
-                    r[root->right->n].isUsed = 0;
-                    r[root->right->n].isConst = 0;
-                    r[root->right->n].val = 0;
-                }
-            }
-            else if (r[root->left->n].isConst && r[root->right->n].isConst && root->left->val == root->right->val && root->left->n > 2) {
-                //printf("ga\n");
-                if (strcmp(root->lexeme, "-") == 0) root->val = 0;
-                if (strcmp(root->lexeme, "/") == 0) root->val = 1;
-                root->n = root->left->n;
-                r[root->n].val = root->val;
-                r[root->n].isConst = 1;
-                root->data = REG;
-            }
-            else if (r[root->left->n].isConst && r[root->right->n].isConst && root->left->val == root->right->val) {
-                //printf("gaaa\n");
-                int n = findUnused();
-                if (strcmp(root->lexeme, "-") == 0) root->val = 0;
-                if (strcmp(root->lexeme, "/") == 0) root->val = 1;
-                root->data = REG;
-                r[n].isConst = 1;
-                r[n].isUsed = 1;
-                r[n].val = root->val;
-                root->n = n;
-            }
-            else if (root->left->n > 2) {
-                //printf("plz\n");
-                if (!r[root->left->n].isConst || !r[root->right->n].isConst) {
-                    if (r[root->left->n].isConst) {
-                        sprintf(nr->s, "MOV %s %d\n", r[root->left->n].name, root->left->val);
+                    if (root->right->m > 0) {
+                        int mem = (5 * (root->right->m - 1) + root->right->n - 3) * 4 + 12;
+                        sprintf(nr->s, "MOV %s [%d]\n", r[root->right->n][root->right->m].name , mem);
                         nr->line = count;
                         newRes();
                     }
-                    if (r[root->right->n].isConst) {
-                        sprintf(nr->s, "MOV %s %d\n", r[root->right->n].name, root->right->val);
+                    r[root->right->n][root->right->m].isUsed = 0;
+                    r[root->right->n][root->right->m].isConst = 0;
+                    r[root->right->n][root->right->m].val = 0;
+                }
+            }
+            else if (strcmp(root->lexeme, "-") == 0 && r[root->right->n][root->right->m].isConst && root->right->val == 0) {
+                root->n = root->left->n;
+                root->m = root->left->m;
+                root->data = REG;
+                root->val = root->left->val;
+                if (root->right->n > 2) {
+                    if (root->right->m > 0) {
+                        int mem = (5 * (root->right->m - 1) + root->right->n - 3) * 4 + 12;
+                        sprintf(nr->s, "MOV %s [%d]\n", r[root->right->n][root->right->m].name , mem);
+                        nr->line = count;
+                        newRes();
+                    }
+                    r[root->right->n][root->right->m].isUsed = 0;
+                    r[root->right->n][root->right->m].isConst = 0;
+                    r[root->right->n][root->right->m].val = 0;
+                }
+            }
+            else if (r[root->left->n][root->left->m].isConst && r[root->right->n][root->right->m].isConst && root->left->val == root->right->val && root->left->n > 2) {
+                if (strcmp(root->lexeme, "-") == 0) root->val = 0;
+                if (strcmp(root->lexeme, "/") == 0) root->val = 1;
+                root->n = root->left->n;
+                root->m = root->left->m;
+                r[root->n][root->m].val = root->val;
+                r[root->n][root->m].isConst = 1;
+                root->data = REG;
+            }
+            else if (r[root->left->n][root->left->m].isConst && r[root->right->n][root->right->m].isConst && root->left->val == root->right->val) {
+                rPair *p = findUnused();
+                if (p->m > 0) {
+                    int mem = (5 * (p->m - 1) + p->n - 3) * 4 + 12;
+                    sprintf(nr->s, "MOV [%d] %s\n", mem, r[p->n][p->m].name);
+                    nr->line = count;
+                    newRes();
+                }
+                if (strcmp(root->lexeme, "-") == 0) root->val = 0;
+                if (strcmp(root->lexeme, "/") == 0) root->val = 1;
+                root->data = REG;
+                r[p->n][p->m].isConst = 1;
+                r[p->n][p->m].isUsed = 1;
+                r[p->n][p->m].val = root->val;
+                root->n = p->n;
+                root->m = p->m;
+                free(p);
+            }
+            else if (root->left->n > 2) {
+                if (!r[root->left->n][root->left->m].isConst || !r[root->right->n][root->right->m].isConst) {
+                    if (r[root->left->n][root->left->m].isConst) {
+                        sprintf(nr->s, "MOV %s %d\n", r[root->left->n][root->left->m].name, root->left->val);
+                        nr->line = count;
+                        newRes();
+                    }
+                    if (r[root->right->n][root->right->m].isConst) {
+                        sprintf(nr->s, "MOV %s %d\n", r[root->right->n][root->right->m].name, root->right->val);
                         nr->line = count;
                         newRes();
                     }
                 
                     if (strcmp(root->lexeme, "-") == 0)
-                        sprintf(nr->s, "SUB %s %s\n", r[root->left->n].name, r[root->right->n].name);
+                        sprintf(nr->s, "SUB %s %s\n", r[root->left->n][root->left->m].name, r[root->right->n][root->right->m].name);
                     if (strcmp(root->lexeme, "/") == 0)
-                        sprintf(nr->s, "DIV %s %s\n", r[root->left->n].name, r[root->right->n].name);
+                        sprintf(nr->s, "DIV %s %s\n", r[root->left->n][root->left->m].name, r[root->right->n][root->right->m].name);
                     nr->line = count;
                     newRes();
                 }
 
                 root->data = REG;
                 if (strcmp(root->lexeme, "-") == 0)
-                    root->val = r[root->left->n].val - r[root->right->n].val;
-                if (strcmp(root->lexeme, "/") == 0 && r[root->right->n].isConst)
-                    root->val = r[root->left->n].val / r[root->right->n].val;
+                    root->val = r[root->left->n][root->left->m].val - r[root->right->n][root->right->m].val;
+                if (strcmp(root->lexeme, "/") == 0 && r[root->right->n][root->right->m].isConst)
+                    root->val = r[root->left->n][root->left->m].val / r[root->right->n][root->right->m].val;
                 
                 root->n = root->left->n;
-                r[root->n].val = root->val;
-                r[root->n].isConst = r[root->left->n].isConst && r[root->right->n].isConst;
+                root->m = root->left->m;
+                r[root->n][root->m].val = root->val;
+                r[root->n][root->m].isConst = r[root->left->n][root->left->m].isConst && r[root->right->n][root->right->m].isConst;
 
                 if (root->right->n > 2) {
-                    r[root->right->n].isUsed = 0;
-                    r[root->right->n].isConst = 0;
-                    r[root->right->n].val = 0;
+                    if (root->right->m > 0) {
+                        int mem = (5 * (root->right->m - 1) + root->right->n - 3) * 4 + 12;
+                        sprintf(nr->s, "MOV %s [%d]\n", r[root->right->n][root->right->m].name , mem);
+                        nr->line = count;
+                        newRes();
+                    }
+                    r[root->right->n][root->right->m].isUsed = 0;
+                    r[root->right->n][root->right->m].isConst = 0;
+                    r[root->right->n][root->right->m].val = 0;
                 }
             }
             else {
-                int n = findUnused();
-                if (!r[root->left->n].isConst || !r[root->right->n].isConst) {
-
-                    sprintf(nr->s, "MOV %s %s\n", r[n].name, r[root->left->n].name);
+                rPair *p = findUnused();
+                if (p->m > 0) {
+                    int mem = (5 * (p->m - 1) + p->n - 3) * 4 + 12;
+                    sprintf(nr->s, "MOV [%d] %s\n", mem, r[p->n][p->m].name);
                     nr->line = count;
                     newRes();
-                    if (r[root->right->n].isConst) {
-                        sprintf(nr->s, "MOV %s %d\n", r[root->right->n].name, root->right->val);
+                }
+                if (!r[root->left->n][root->left->m].isConst || !r[root->right->n][root->right->m].isConst) {
+
+                    sprintf(nr->s, "MOV %s %s\n", r[p->n][p->m].name, r[root->left->n][root->left->m].name);
+                    nr->line = count;
+                    newRes();
+                    if (r[root->right->n][root->right->m].isConst) {
+                        sprintf(nr->s, "MOV %s %d\n", r[root->right->n][root->right->m].name, root->right->val);
                         nr->line = count;
                         newRes();
                     }
                     if (strcmp(root->lexeme, "-") == 0)
-                        sprintf(nr->s, "SUB %s %s\n", r[n].name, r[root->right->n].name);
+                        sprintf(nr->s, "SUB %s %s\n", r[p->n][p->m].name, r[root->right->n][root->right->m].name);
                     if (strcmp(root->lexeme, "/") == 0 )
-                        sprintf(nr->s, "DIV %s %s\n", r[n].name, r[root->right->n].name);
+                        sprintf(nr->s, "DIV %s %s\n", r[p->n][p->m].name, r[root->right->n][root->right->m].name);
                     nr->line = count;
                     newRes();
                 }
                 
-                r[n].isConst = r[root->left->n].isConst && r[root->right->n].isConst;
-                r[n].isUsed = 1;
+                r[p->n][p->m].isConst = r[root->left->n][root->left->m].isConst && r[root->right->n][root->right->m].isConst;
+                r[p->n][p->m].isUsed = 1;
                 if (strcmp(root->lexeme, "-") == 0)
-                    r[n].val = root->left->val - root->right->val;
-                if (strcmp(root->lexeme, "/") == 0 && r[root->right->n].isConst)
-                    r[n].val = root->left->val / root->right->val;
-                //printf("%d %d %d\n", r[n].val, root->left->val, root->right->val);
+                    r[p->n][p->m].val = root->left->val - root->right->val;
+                if (strcmp(root->lexeme, "/") == 0 && r[root->right->n][root->right->m].isConst)
+                    r[p->n][p->m].val = root->left->val / root->right->val;
+                
                 root->data = REG;
-                root->val = r[n].val;
-                root->n = n;
+                root->val = r[p->n][p->m].val;
+                root->n = p->n;
+                root->m = p->m;
+                free(p);
             }
 
         }
-        /*else if (strcmp(root->lexeme, "/") == 0) {
-
-        }*/
     }
     
-    toAssign = &r[root->n];
-    
-    
-    
-
+    toAssign = &r[root->n][root->m];
 }
 
 /*statement   := END | expr END*/
@@ -827,7 +928,6 @@ void statement(void)
     if (match(ENDFILE)) {
         
         for(int i = 0; i < 3; i++) {
-            //printf("last %d %d\n", i , last[i]);
             if ((last[i] == 0 && asked[i] == 0)||(asked[i]!=0 && asked[i]!= last[0] && asked[i]!= last[1] && asked[i]!= last[2]))  {
                 printf("MOV r%d %s\n", i, table[i].Addr);
             }
@@ -836,7 +936,6 @@ void statement(void)
         printf("EXIT 0\n");
         exit(0);
     } else if (match(END)) {
-        //printf(">> ");
         advance();
     } else {
         nrHead = nr;
@@ -855,75 +954,74 @@ void statement(void)
             }
             evaluateTree(retp);
             reArrange(retp);
+            //printf("here\n");
             treeToList(retp);
+            
             if (toAssign->isConst) {
                 Result *rtmp, *del;
-                //printf("this %s\n",nrHead->s);
                 rtmp = nrHead;
-                //printf("b %s\n", nrHead->s);
-                //while(rtmp->line != count) rtmp = rtmp->next;
+                
                 
                 if(rtmp->next != NULL)  {
-                    //printf("???\n");
                     del = rtmp->next;
                     rtmp->next = NULL;
                     freeList(del);
                 }
-                //else printf("ya\n");
                 
                 nr = rtmp;
                 //newRes();
                 
                 for(int i = 0; i < 3; i++) {
                     if(nl->master[i] == 1) {
-                        //printf("to %d\n", toAssign->val);
-                        r[i].isConst = 1;
-                        r[i].val = toAssign->val;
+                        r[i][0].isConst = 1;
+                        r[i][0].val = toAssign->val;
                         table[i].init = 1;
-                        table[i].val = r[i].val;
+                        table[i].val = r[i][0].val;
                         last[i] = count;
-                        sprintf(nr->s, "MOV %s %d\n", r[i].name, table[i].val);
+                        sprintf(nr->s, "MOV %s %d\n", r[i][0].name, table[i].val);
                         nr->line = count;
                         newRes();
                     }
                     else if (preInit[i] == 0 && table[i].init == 1) {
                         
-                        sprintf(nr->s, "MOV %s %s\n", r[i].name, table[i].Addr);
+                        sprintf(nr->s, "MOV %s %s\n", r[i][0].name, table[i].Addr);
                         nr->line = count;
                         newRes();
                     }
-                }
-                //printf("a %s\n", nrHead->s);            
+                }         
             }
             else {
                 for(int i = 0; i < 3; i++) {
                     if(nl->master[i] == 1 && toAssign->n != i) {
-                        r[i].val = toAssign->val;
-                        //printf("%d %d \n", r[i].val, toAssign->val);
+                        r[i][0].val = toAssign->val;
                         table[i].init = 1;
-                        table[i].val = r[i].val;
+                        table[i].val = r[i][0].val;
                         last[i] = count;
                         if (toAssign->isConst) {
                             
                         } 
                         else {
-                            sprintf(nr->s, "MOV %s %s\n", r[i].name, toAssign->name);
+                            sprintf(nr->s, "MOV %s %s\n", r[i][0].name, toAssign->name);
                             nr->line = count;
                             newRes();
-                            r[i].isConst = 0;
+                            r[i][0].isConst = 0;
                         }
                     
                     }
                 }
             }
+            if (toAssign->m > 0) {
+                int mem = (5 * (toAssign->m - 1) + toAssign->n - 3) * 4 + 12;
+                sprintf(nr->s, "MOV %s [%d]\n", r[toAssign->n][toAssign->m].name , mem);
+                nr->line = count;
+                newRes();
+            }
             toAssign->isUsed = 0;
             toAssign->val = 0;
             toAssign->isConst = 0;
-            //printf("%d\n", );
-            //printPrefix(retp); printf("\n");
+
             freeTree(retp);
 
-            //printf(">> ");
             advance();
         }
     }
@@ -938,25 +1036,22 @@ void evaluateTree(BTNode *root)
     
     if (root != NULL)
     {
-        //printPrefix(root);
 
-        //printf("rooot lex %s\n", root->lexeme);
         if (root->data == INT) return;
         else if (root->data == ID) {
             //compare錯 其實沒用到
-            for (int i = 0; i < 3; i++) {
-                //printf("rooot %s %s\n", root->lexeme, r[i].name);
-                if (strcmp(root->lexeme, r[i].name) == 0) {
-                    if (r[i].isConst) {
-                        //printf("yo\n");
+            /*for (int i = 0; i < 3; i++) {
+                if (strcmp(root->lexeme, r[i][0].name) == 0) {
+                    if (r[i][0].isConst) {
+                        
                         root->data = INT;
-                        root->val = r[i].val;
+                        root->val = r[i][0].val;
                         sprintf(lexe, "%d", root->val);
                         strcpy(root->lexeme, lexe);
                     }
                     break;
                 }
-            }
+            }*/
             return;
         }
         if (root->left) evaluateTree(root->left);
@@ -967,7 +1062,6 @@ void evaluateTree(BTNode *root)
                 root->val = root->left->val + root->right->val;
                 sprintf(lexe, "%d", root->val);
                 strcpy(root->lexeme, lexe);
-                //printf("root %d\n", root->val);
             }
                 
             else if (strcmp(root->lexeme, "-") == 0) {
@@ -990,8 +1084,6 @@ void evaluateTree(BTNode *root)
                 sprintf(lexe, "%d", root->val);
                 strcpy(root->lexeme, lexe);
             }
-            /*else if (strcmp(root->lexeme, "=") == 0)
-                retval = setval(root->left->lexeme, rv);*/
             root->data = INT;
             tmp = root->left;
             root->left = NULL;
@@ -1000,33 +1092,7 @@ void evaluateTree(BTNode *root)
             root->right = NULL;
             free(tmp);
         }
-        /*switch (root->data)
-        {
-        case ID:
-        case INT:
-            retval = root->val;
-            break;
-        case ASSIGN:
-        case ADDSUB:
-        case MULDIV:
-            lv = evaluateTree(root->left);
-            rv = evaluateTree(root->right);
-            if (strcmp(root->lexeme, "+") == 0)
-                retval = lv + rv;
-            else if (strcmp(root->lexeme, "-") == 0)
-                retval = lv - rv;
-            else if (strcmp(root->lexeme, "*") == 0)
-                retval = lv * rv;
-            else if (strcmp(root->lexeme, "/") == 0)
-                retval = lv / rv;
-            else if (strcmp(root->lexeme, "=") == 0)
-                retval = setval(root->left->lexeme, rv);
-            break;
-        default:
-            retval = 0;
-        }*/
     }
-    //return retval;
 }
 
 
@@ -1038,10 +1104,15 @@ int main()
     
 
     char name[5];
-    for(int i = 0; i < 20; i++) {
+    for(int i = 0; i < 8; i++) {
         sprintf(name, "r%d", i);
-        strcpy(r[i].name, name);
-        r[i].n = i; //有用到ㄇ？
+        for(int j = 0; j < 10; j++) {
+            strcpy(r[i][j].name, name);
+            r[i][j].n = i; //有用到ㄇ？
+            r[i][j].m = j;
+            r[i][j].isConst = 0;
+            r[i][j].isUsed = 0;
+        }  
     }
 
     head = (Result*)malloc(sizeof(Result));
