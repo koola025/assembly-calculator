@@ -65,12 +65,11 @@ int sbcount = 0;
 int count = 0;  
 int behind;
 int already;
-//int xLast, yLast, zLast;
 int last[3] = {0};
 int asked[3] = {0};
 Result *head, *nr, *nrHead;
 Line *lineHead, *nl;
-Reg r[8][10];
+Reg r[8][12];
 Reg *toAssign;
 
 
@@ -88,11 +87,10 @@ void newLine(void) {
 }
 
 rPair *findUnused(void) {   //找還沒用過的r
-    //printf("findUnused\n");
     rPair *p;
     p = (rPair *)malloc(sizeof(rPair));
     int i, j;
-    for(j = 0; j < 10; j++) {
+    for(j = 0; j < 12; j++) {
         for(i = 3; i < 8; i++) { //直接從r3開始找
             if(!r[i][j].isUsed) {
                 p->n = i;
@@ -1038,22 +1036,8 @@ void evaluateTree(BTNode *root)
     {
 
         if (root->data == INT) return;
-        else if (root->data == ID) {
-            //compare錯 其實沒用到
-            /*for (int i = 0; i < 3; i++) {
-                if (strcmp(root->lexeme, r[i][0].name) == 0) {
-                    if (r[i][0].isConst) {
-                        
-                        root->data = INT;
-                        root->val = r[i][0].val;
-                        sprintf(lexe, "%d", root->val);
-                        strcpy(root->lexeme, lexe);
-                    }
-                    break;
-                }
-            }*/
-            return;
-        }
+        else if (root->data == ID) return;
+        
         if (root->left) evaluateTree(root->left);
         if (root->right) evaluateTree(root->right);
 
@@ -1095,10 +1079,6 @@ void evaluateTree(BTNode *root)
     }
 }
 
-
-
-
-
 int main()
 {
     
@@ -1106,7 +1086,7 @@ int main()
     char name[5];
     for(int i = 0; i < 8; i++) {
         sprintf(name, "r%d", i);
-        for(int j = 0; j < 10; j++) {
+        for(int j = 0; j < 12; j++) {
             strcpy(r[i][j].name, name);
             r[i][j].n = i; //有用到ㄇ？
             r[i][j].m = j;
